@@ -25,6 +25,32 @@ Uma linguagem de programação baseada em emojis, escrita em Go.
 ✍️ numero = 42
 ```
 
+### Sistema de Tipos
+```emoji
+// Tipos inferidos automaticamente
+✍️ nome = "Melhorzin"   // Tipo String inferido automaticamente
+✍️ idade = 25          // Tipo Number inferido automaticamente
+
+// Tipos explícitos
+✍️ pontos:🔢 = 100              // Número (🔢)
+✍️ mensagem:📝 = "Olá mundo!"   // String (📝)
+✍️ ativo:⚖️ = true              // Boolean (⚖️)
+✍️ qualquer:🗑️ = "qualquer coisa"  // Any/Qualquer (🗑️)
+```
+
+### Funções com Tipos
+```emoji
+// Função com parâmetros e retorno tipados
+▶️ soma(a:🔢, b:🔢):🔢 {
+    ↩️ a + b
+}
+
+// Função com tipo de retorno string
+▶️ saudacao(nome:📝):📝 {
+    ↩️ "Olá, " . nome . "!"
+}
+```
+
 ### Operações
 ```emoji
 +   # Soma numérica (anteriormente ➕)
