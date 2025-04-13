@@ -26,6 +26,7 @@ const (
 	TokenIdentifier  TokenType = "IDENTIFIER"  // nomedavariavel
 	TokenString      TokenType = "STRING"      // "texto"
 	TokenNumber      TokenType = "NUMBER"      // 10
+	TokenBoolean     TokenType = "BOOLEAN"     // true/false
 	TokenLBrace      TokenType = "LBRACE"      // {
 	TokenRBrace      TokenType = "RBRACE"      // }
 	TokenLParen      TokenType = "LPAREN"      // (
@@ -34,6 +35,13 @@ const (
 	TokenEqualSign   TokenType = "EQUALSIGN"   // =
 	TokenPlus        TokenType = "PLUS"        // +
 	TokenEOF         TokenType = "EOF"
+
+	// Tokens for type system
+	TokenTypeNumber TokenType = "TYPE_NUMBER" // 🔢
+	TokenTypeString TokenType = "TYPE_STRING" // 📝
+	TokenTypeBool   TokenType = "TYPE_BOOL"   // ⚖️
+	TokenTypeAny    TokenType = "TYPE_ANY"    // 🗑️
+	TokenTypeColon  TokenType = "TYPE_COLON"  // :
 )
 
 // Token representa um token com tipo e valor.
@@ -114,6 +122,27 @@ func (l *Lexer) Lex() []Token {
 		if strings.HasPrefix(remaining, "💱") {
 			// Não precisamos tokenizar o emoji de interpolação, a interpolação será tratada no parser
 			l.pos += len("💱")
+			continue
+		}
+		// Type emojis
+		if strings.HasPrefix(remaining, "🔢") {
+			l.tokens = append(l.tokens, Token{Type: TokenTypeNumber, Value: "🔢"})
+			l.pos += len("🔢")
+			continue
+		}
+		if strings.HasPrefix(remaining, "📝") {
+			l.tokens = append(l.tokens, Token{Type: TokenTypeString, Value: "📝"})
+			l.pos += len("📝")
+			continue
+		}
+		if strings.HasPrefix(remaining, "⚖️") {
+			l.tokens = append(l.tokens, Token{Type: TokenTypeBool, Value: "⚖️"})
+			l.pos += len("⚖️")
+			continue
+		}
+		if strings.HasPrefix(remaining, "🗑️") {
+			l.tokens = append(l.tokens, Token{Type: TokenTypeAny, Value: "🗑️"})
+			l.pos += len("🗑️")
 			continue
 		}
 
@@ -210,7 +239,11 @@ func (l *Lexer) Lex() []Token {
 				l.pos++
 			}
 			value := l.input[start:l.pos]
-			if value == "main" {
+
+			// Verificar palavras-chave e valores booleanos
+			if value == "true" || value == "false" {
+				l.tokens = append(l.tokens, Token{Type: TokenBoolean, Value: value})
+			} else if value == "main" {
 				l.tokens = append(l.tokens, Token{Type: TokenMain, Value: value})
 			} else {
 				l.tokens = append(l.tokens, Token{Type: TokenIdentifier, Value: value})
@@ -229,6 +262,9 @@ func (l *Lexer) Lex() []Token {
 			l.pos++
 		case r == '.':
 			l.tokens = append(l.tokens, Token{Type: TokenConcat, Value: "."})
+			l.pos++
+		case r == ':':
+			l.tokens = append(l.tokens, Token{Type: TokenTypeColon, Value: ":"})
 			l.pos++
 		default:
 			fmt.Printf("Caractere inesperado na posição %d: '%s' (Unicode: U+%X)\n", l.pos, string(r), r)
