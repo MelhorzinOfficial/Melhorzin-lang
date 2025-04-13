@@ -1,0 +1,38 @@
+✍️ idade = 25
+✍️ nome = "Melhorzin"
+✍️ pontos:🔢 = 100
+✍️ mensagem:📝 = "Olá, tipo explícito!"
+✍️ ativo:⚖️ = true
+✍️ qualquer:🗑️ = "isso pode ser qualquer coisa"
+
+🖨️ "===== VARIÁVEIS COM TIPOS ====="
+🖨️ "Idade (inferido): " . idade
+🖨️ "Nome (inferido): " . nome
+🖨️ "Pontos (explícito): " . pontos
+🖨️ "Mensagem (explícito): " . mensagem
+🖨️ "Ativo (explícito): " . ativo
+🖨️ "Qualquer (tipo any): " . qualquer
+
+▶️ soma(a:🔢, b:🔢):🔢 {
+    🖨️ "Somando valores com tipos..."
+    ↩️ a + b
+}
+
+▶️ saudacao(nome:📝):📝 {
+    🖨️ "Criando saudação..."
+    ↩️ "Olá, " . nome . "!"
+}
+
+▶️ processar(valor:🗑️):🗑️ {
+    🖨️ "Processando valor de qualquer tipo..."
+    ↩️ valor
+}
+
+✍️ resultado = soma(idade, pontos)
+🖨️ "Resultado da soma: " . resultado
+
+✍️ msg = saudacao(nome)
+🖨️ "Mensagem: " . msg
+
+✍️ proc = processar(qualquer)
+🖨️ "Valor processado: " . proc 
