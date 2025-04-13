@@ -1,0 +1,28 @@
+✍️ a = 10
+✍️ b = 5
+✍️ nome = "Melhorzin"
+✍️ versao = 1
+
+▶️ soma(x, y) {
+    🖨️ "Somando valores..."
+    ↩️ x + y
+}
+
+▶️ mult(x, y) {
+    🖨️ "Multiplicando valores..."
+    ↩️ x * y
+}
+
+▶️ saudacao(nome) {
+    🖨️ "Processando saudação..."
+    ↩️ "Olá, " . nome . "!"
+}
+
+🖨️ "===== TESTES ====="
+
+🖨️ "Soma: " . soma(a, b)
+🖨️ "Multiplicação: " . mult(a, b)
+🖨️ "Mensagem: " . saudacao(nome)
+🖨️ "Linguagem: " . nome . " versão " . versao
+
+🖨️ "===== FIM =====" 
