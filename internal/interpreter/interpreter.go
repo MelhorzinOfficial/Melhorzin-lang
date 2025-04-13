@@ -8,12 +8,16 @@ import (
 // Interpreter executa a AST.
 type Interpreter struct {
 	variables map[string]interface{}
+	types     map[string]parser.Type // Mapa para guardar os tipos das variáveis
 	result    interface{}
 }
 
 // NewInterpreter cria um novo interpretador.
 func NewInterpreter() *Interpreter {
-	return &Interpreter{variables: make(map[string]interface{})}
+	return &Interpreter{
+		variables: make(map[string]interface{}),
+		types:     make(map[string]parser.Type),
+	}
 }
 
 // Interpret executa os nós da AST.
@@ -24,6 +28,11 @@ func (i *Interpreter) Interpret(nodes []parser.Node) interface{} {
 		result := node.Evaluate(i.variables)
 		i.result = result
 
+		// Se for um nó de atribuição, armazenar o tipo da variável
+		if assignNode, ok := node.(*parser.AssignNode); ok {
+			i.types[assignNode.Name] = assignNode.GetType()
+		}
+
 		// Remover prints duplicados - o PrintNode já imprime diretamente
 		// Apenas mostrar outros tipos de resultados
 		if result != nil {
@@ -32,6 +41,8 @@ func (i *Interpreter) Interpret(nodes []parser.Node) interface{} {
 				case int:
 					fmt.Println(v)
 				case bool:
+					fmt.Println(v)
+				case string:
 					fmt.Println(v)
 				case *parser.FunctionNode:
 					// Não exibe nada quando define uma função
@@ -51,4 +62,12 @@ func (i *Interpreter) Interpret(nodes []parser.Node) interface{} {
 // GetResult retorna o último valor calculado
 func (i *Interpreter) GetResult() interface{} {
 	return i.result
+}
+
+// GetVariableType retorna o tipo de uma variável
+func (i *Interpreter) GetVariableType(name string) parser.Type {
+	if t, exists := i.types[name]; exists {
+		return t
+	}
+	return parser.TypeAny
 }
