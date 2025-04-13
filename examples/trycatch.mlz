@@ -1,0 +1,12 @@
+✍️ num1 = 5
+✍️ num2 = 10
+
+▶️ soma(a, b) {
+    🖨️ "Somando valores..."
+    ↩️ a + b
+}
+
+🖨️ "Chamando a função soma"
+✍️ resultado = soma(num1, num2)
+🖨️ "O resultado da soma é:"
+resultado
