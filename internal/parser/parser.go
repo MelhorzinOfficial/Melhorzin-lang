@@ -8,9 +8,21 @@ import (
 	"strings"
 )
 
+// Type representa um tipo de dados na linguagem.
+type Type string
+
+const (
+	TypeNumber Type = "NUMBER"
+	TypeString Type = "STRING"
+	TypeBool   Type = "BOOL"
+	TypeAny    Type = "ANY"
+)
+
 // Node representa um nó da AST.
 type Node interface {
 	Evaluate(vars map[string]interface{}) interface{}
+	// Novo método para verificação de tipos
+	GetType() Type
 }
 
 // PrintNode para instruções de impressão.
@@ -41,20 +53,77 @@ func (n *PrintNode) Evaluate(vars map[string]interface{}) interface{} {
 	return result
 }
 
+func (n *PrintNode) GetType() Type {
+	return TypeString
+}
+
 // AssignNode para atribuições.
 type AssignNode struct {
-	Name  string
-	Value interface{}
+	Name         string
+	Value        interface{}
+	DeclaredType Type // Tipo declarado explicitamente
+	InferredType Type // Tipo inferido do valor
 }
 
 func (n *AssignNode) Evaluate(vars map[string]interface{}) interface{} {
 	// Se o valor for um nó, avaliá-lo primeiro
+	var value interface{}
+
 	if node, ok := n.Value.(Node); ok {
-		vars[n.Name] = node.Evaluate(vars)
+		value = node.Evaluate(vars)
+
+		// Verificação de tipo dinâmica
+		valueType := node.GetType()
+		if n.DeclaredType != TypeAny && n.DeclaredType != valueType {
+			panic(fmt.Sprintf("Erro de tipo: esperado %s para variável %s, mas recebeu %s",
+				n.DeclaredType, n.Name, valueType))
+		}
 	} else {
-		vars[n.Name] = n.Value
+		value = n.Value
+
+		// Verificação de tipo para valores literais
+		if n.DeclaredType != TypeAny {
+			switch n.DeclaredType {
+			case TypeNumber:
+				if _, ok := value.(int); !ok {
+					panic(fmt.Sprintf("Erro de tipo: esperado NUMBER para variável %s", n.Name))
+				}
+			case TypeString:
+				if _, ok := value.(string); !ok {
+					panic(fmt.Sprintf("Erro de tipo: esperado STRING para variável %s", n.Name))
+				}
+			case TypeBool:
+				if _, ok := value.(bool); !ok {
+					panic(fmt.Sprintf("Erro de tipo: esperado BOOL para variável %s", n.Name))
+				}
+			}
+		}
 	}
+
+	vars[n.Name] = value
 	return nil
+}
+
+func (n *AssignNode) GetType() Type {
+	if n.DeclaredType != TypeAny {
+		return n.DeclaredType
+	}
+
+	// Inferir tipo
+	if node, ok := n.Value.(Node); ok {
+		return node.GetType()
+	}
+
+	switch n.Value.(type) {
+	case int:
+		return TypeNumber
+	case string:
+		return TypeString
+	case bool:
+		return TypeBool
+	default:
+		return TypeAny
+	}
 }
 
 // EqualNode para comparações.
@@ -70,6 +139,10 @@ func (n *EqualNode) Evaluate(vars map[string]interface{}) interface{} {
 	return false
 }
 
+func (n *EqualNode) GetType() Type {
+	return TypeBool
+}
+
 // BinaryOpNode para operações binárias
 type BinaryOpNode struct {
 	Left  Node
@@ -81,9 +154,17 @@ func (n *BinaryOpNode) Evaluate(vars map[string]interface{}) interface{} {
 	leftVal := n.Left.Evaluate(vars)
 	rightVal := n.Right.Evaluate(vars)
 
+	// Verificação de tipo durante a avaliação
+	leftType := n.Left.GetType()
+	rightType := n.Right.GetType()
+
 	switch n.Op {
 	case lexer.TokenPlus:
 		// + agora é só para soma numérica
+		if leftType != TypeNumber || rightType != TypeNumber {
+			panic(fmt.Sprintf("Erro de tipo: Operação + requer operandos do tipo NUMBER"))
+		}
+
 		if leftInt, ok := leftVal.(int); ok {
 			if rightInt, ok := rightVal.(int); ok {
 				return leftInt + rightInt
@@ -95,6 +176,10 @@ func (n *BinaryOpNode) Evaluate(vars map[string]interface{}) interface{} {
 		return fmt.Sprintf("%v%v", leftVal, rightVal)
 	case lexer.TokenNumPlus:
 		// ➕ é para soma numérica (manter por compatibilidade)
+		if leftType != TypeNumber || rightType != TypeNumber {
+			panic(fmt.Sprintf("Erro de tipo: Operação ➕ requer operandos do tipo NUMBER"))
+		}
+
 		if leftInt, ok := leftVal.(int); ok {
 			if rightInt, ok := rightVal.(int); ok {
 				return leftInt + rightInt
@@ -103,6 +188,10 @@ func (n *BinaryOpNode) Evaluate(vars map[string]interface{}) interface{} {
 		return nil
 	case lexer.TokenMult:
 		// ✖️ é para multiplicação numérica
+		if leftType != TypeNumber || rightType != TypeNumber {
+			panic(fmt.Sprintf("Erro de tipo: Operação * requer operandos do tipo NUMBER"))
+		}
+
 		if leftInt, ok := leftVal.(int); ok {
 			if rightInt, ok := rightVal.(int); ok {
 				return leftInt * rightInt
@@ -112,9 +201,17 @@ func (n *BinaryOpNode) Evaluate(vars map[string]interface{}) interface{} {
 	return nil
 }
 
+func (n *BinaryOpNode) GetType() Type {
+	if n.Op == lexer.TokenConcat {
+		return TypeString
+	}
+	return TypeNumber
+}
+
 // VariableNode para acessar variáveis
 type VariableNode struct {
 	Name string
+	Type Type // Tipo da variável
 }
 
 func (n *VariableNode) Evaluate(vars map[string]interface{}) interface{} {
@@ -124,10 +221,16 @@ func (n *VariableNode) Evaluate(vars map[string]interface{}) interface{} {
 	return nil
 }
 
+func (n *VariableNode) GetType() Type {
+	return n.Type
+}
+
 // FunctionNode para definição de funções
 type FunctionNode struct {
 	Name       string
 	Parameters []string
+	ParamTypes []Type // Tipos dos parâmetros
+	ReturnType Type   // Tipo de retorno
 	Body       []Node
 }
 
@@ -135,6 +238,10 @@ func (n *FunctionNode) Evaluate(vars map[string]interface{}) interface{} {
 	// Armazena a função no mapa de variáveis
 	vars[n.Name] = n
 	return nil
+}
+
+func (n *FunctionNode) GetType() Type {
+	return n.ReturnType
 }
 
 // ReturnNode para retorno de valores
@@ -146,6 +253,10 @@ func (n *ReturnNode) Evaluate(vars map[string]interface{}) interface{} {
 	return n.Value.Evaluate(vars)
 }
 
+func (n *ReturnNode) GetType() Type {
+	return n.Value.GetType()
+}
+
 // FunctionCallNode para chamadas de função
 type FunctionCallNode struct {
 	Name      string
@@ -155,6 +266,11 @@ type FunctionCallNode struct {
 func (n *FunctionCallNode) Evaluate(vars map[string]interface{}) interface{} {
 	if fnValue, exists := vars[n.Name]; exists {
 		if fn, ok := fnValue.(*FunctionNode); ok {
+			// Verificação de tipos dos argumentos
+			if len(n.Arguments) != len(fn.Parameters) {
+				panic(fmt.Sprintf("Número incorreto de argumentos para função %s", n.Name))
+			}
+
 			// Criar ambiente local para a função
 			localVars := make(map[string]interface{})
 			for k, v := range vars {
@@ -163,9 +279,16 @@ func (n *FunctionCallNode) Evaluate(vars map[string]interface{}) interface{} {
 
 			// Avaliar argumentos e associá-los aos parâmetros
 			for i, argNode := range n.Arguments {
-				if i < len(fn.Parameters) {
-					localVars[fn.Parameters[i]] = argNode.Evaluate(vars)
+				argValue := argNode.Evaluate(vars)
+				argType := argNode.GetType()
+
+				// Verificar se o tipo do argumento é compatível com o tipo do parâmetro
+				if fn.ParamTypes[i] != TypeAny && fn.ParamTypes[i] != argType {
+					panic(fmt.Sprintf("Tipo incorreto para argumento %d da função %s: esperado %s, recebido %s",
+						i+1, n.Name, fn.ParamTypes[i], argType))
 				}
+
+				localVars[fn.Parameters[i]] = argValue
 			}
 
 			// Executar o corpo da função
@@ -173,7 +296,16 @@ func (n *FunctionCallNode) Evaluate(vars map[string]interface{}) interface{} {
 			for _, node := range fn.Body {
 				if returnNode, ok := node.(*ReturnNode); ok {
 					// Se encontrar um return, avalia e retorna
-					return returnNode.Value.Evaluate(localVars)
+					returnValue := returnNode.Value.Evaluate(localVars)
+					returnType := returnNode.GetType()
+
+					// Verificar se o tipo de retorno é compatível
+					if fn.ReturnType != TypeAny && fn.ReturnType != returnType {
+						panic(fmt.Sprintf("Tipo de retorno incorreto para função %s: esperado %s, recebido %s",
+							n.Name, fn.ReturnType, returnType))
+					}
+
+					return returnValue
 				}
 				// Avaliar cada nó no corpo da função
 				nodeResult := node.Evaluate(localVars)
@@ -188,6 +320,12 @@ func (n *FunctionCallNode) Evaluate(vars map[string]interface{}) interface{} {
 	return nil
 }
 
+func (n *FunctionCallNode) GetType() Type {
+	// Fixed: Vars is not globally defined, should be passed as parameter
+	// This returns a conservative TypeAny since actual type checking happens during evaluation
+	return TypeAny
+}
+
 // MainNode para a função main.
 type MainNode struct {
 	Body []Node
@@ -198,6 +336,10 @@ func (n *MainNode) Evaluate(vars map[string]interface{}) interface{} {
 		node.Evaluate(vars)
 	}
 	return nil
+}
+
+func (n *MainNode) GetType() Type {
+	return TypeAny
 }
 
 // TryCatchNode para try-catch.
@@ -217,15 +359,24 @@ func (n *TryCatchNode) Evaluate(vars map[string]interface{}) interface{} {
 	return nil
 }
 
+func (n *TryCatchNode) GetType() Type {
+	return TypeAny
+}
+
 // Parser contém o estado do parser.
 type Parser struct {
 	tokens []lexer.Token
 	pos    int
+	vars   map[string]Type // Armazenar tipos de variáveis
 }
 
 // NewParser cria um novo parser.
 func NewParser(tokens []lexer.Token) *Parser {
-	return &Parser{tokens: tokens, pos: 0}
+	return &Parser{
+		tokens: tokens,
+		pos:    0,
+		vars:   make(map[string]Type),
+	}
 }
 
 // Parse analisa os tokens e retorna a AST.
@@ -322,23 +473,104 @@ func (p *Parser) parsePrint() Node {
 func (p *Parser) parseAssign() Node {
 	p.consume(lexer.TokenAssign)
 	name := p.consume(lexer.TokenIdentifier).Value
+
+	// Verificar se há uma declaração de tipo explícita
+	var declaredType Type = TypeAny
+	if p.currentToken().Type == lexer.TokenTypeColon {
+		p.consume(lexer.TokenTypeColon)
+		declaredType = p.parseTypeAnnotation()
+	}
+
 	p.consume(lexer.TokenEqualSign)
 
-	// Verificar se é uma função sendo chamada
+	// Verificar se é uma função sendo chamada ou uma expressão com múltiplos operandos
 	if p.currentToken().Type == lexer.TokenIdentifier && p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].Type == lexer.TokenLParen {
-		return &AssignNode{Name: name, Value: p.parseFunctionCall()}
+		functionCall := p.parseFunctionCall()
+		// Armazenar o tipo da variável
+		p.vars[name] = functionCall.GetType()
+		return &AssignNode{Name: name, Value: functionCall, DeclaredType: declaredType}
 	}
 
+	// Verificar se é um valor literal (string, número, booleano) ou uma expressão
 	if p.currentToken().Type == lexer.TokenString {
 		value := p.consume(lexer.TokenString).Value
-		return &AssignNode{Name: name, Value: value}
+		// Inferir tipo como string
+		inferredType := TypeString
+
+		// Verificar compatibilidade de tipos
+		if declaredType != TypeAny && declaredType != inferredType {
+			panic(fmt.Sprintf("Erro de tipo: variável %s declarada como %s, mas recebeu valor de tipo %s",
+				name, declaredType, inferredType))
+		}
+
+		// Armazenar o tipo da variável
+		p.vars[name] = inferredType
+		return &AssignNode{Name: name, Value: value, DeclaredType: declaredType, InferredType: inferredType}
 	}
 
-	value, err := strconv.Atoi(p.consume(lexer.TokenNumber).Value)
-	if err != nil {
-		panic(fmt.Sprintf("Número inválido: %s", p.currentToken().Value))
+	if p.currentToken().Type == lexer.TokenNumber {
+		strValue := p.consume(lexer.TokenNumber).Value
+		value, err := strconv.Atoi(strValue)
+		if err != nil {
+			panic(fmt.Sprintf("Número inválido: %s", strValue))
+		}
+
+		// Inferir tipo como número
+		inferredType := TypeNumber
+
+		// Verificar compatibilidade de tipos
+		if declaredType != TypeAny && declaredType != inferredType {
+			panic(fmt.Sprintf("Erro de tipo: variável %s declarada como %s, mas recebeu valor de tipo %s",
+				name, declaredType, inferredType))
+		}
+
+		// Armazenar o tipo da variável
+		p.vars[name] = inferredType
+		return &AssignNode{Name: name, Value: value, DeclaredType: declaredType, InferredType: inferredType}
 	}
-	return &AssignNode{Name: name, Value: value}
+
+	if p.currentToken().Type == lexer.TokenBoolean {
+		boolValue := p.consume(lexer.TokenBoolean).Value == "true"
+
+		// Inferir tipo como boolean
+		inferredType := TypeBool
+
+		// Verificar compatibilidade de tipos
+		if declaredType != TypeAny && declaredType != inferredType {
+			panic(fmt.Sprintf("Erro de tipo: variável %s declarada como %s, mas recebeu valor de tipo %s",
+				name, declaredType, inferredType))
+		}
+
+		// Armazenar o tipo da variável
+		p.vars[name] = inferredType
+		return &AssignNode{Name: name, Value: boolValue, DeclaredType: declaredType, InferredType: inferredType}
+	}
+
+	// Se não for um literal, tenta parsear como expressão
+	expr := p.parseExpression()
+	// Armazenar o tipo da variável
+	p.vars[name] = expr.GetType()
+	return &AssignNode{Name: name, Value: expr, DeclaredType: declaredType}
+}
+
+// parseTypeAnnotation analisa uma anotação de tipo
+func (p *Parser) parseTypeAnnotation() Type {
+	switch p.currentToken().Type {
+	case lexer.TokenTypeNumber:
+		p.consume(lexer.TokenTypeNumber)
+		return TypeNumber
+	case lexer.TokenTypeString:
+		p.consume(lexer.TokenTypeString)
+		return TypeString
+	case lexer.TokenTypeBool:
+		p.consume(lexer.TokenTypeBool)
+		return TypeBool
+	case lexer.TokenTypeAny:
+		p.consume(lexer.TokenTypeAny)
+		return TypeAny
+	default:
+		panic(fmt.Sprintf("Anotação de tipo inválida: %s", p.currentToken().Value))
+	}
 }
 
 func (p *Parser) parseEqual() Node {
@@ -402,16 +634,45 @@ func (p *Parser) parseFunction() Node {
 	name := p.consume(lexer.TokenIdentifier).Value
 	p.consume(lexer.TokenLParen)
 
-	// Analisar parâmetros
+	// Analisar parâmetros e seus tipos
 	var params []string
+	var paramTypes []Type
+
 	if p.currentToken().Type != lexer.TokenRParen {
-		params = append(params, p.consume(lexer.TokenIdentifier).Value)
+		paramName := p.consume(lexer.TokenIdentifier).Value
+		params = append(params, paramName)
+
+		// Verificar se tem anotação de tipo
+		var paramType Type = TypeAny
+		if p.currentToken().Type == lexer.TokenTypeColon {
+			p.consume(lexer.TokenTypeColon)
+			paramType = p.parseTypeAnnotation()
+		}
+		paramTypes = append(paramTypes, paramType)
+
 		for p.currentToken().Type == lexer.TokenComma {
 			p.consume(lexer.TokenComma)
-			params = append(params, p.consume(lexer.TokenIdentifier).Value)
+			paramName := p.consume(lexer.TokenIdentifier).Value
+			params = append(params, paramName)
+
+			// Verificar se tem anotação de tipo
+			paramType = TypeAny
+			if p.currentToken().Type == lexer.TokenTypeColon {
+				p.consume(lexer.TokenTypeColon)
+				paramType = p.parseTypeAnnotation()
+			}
+			paramTypes = append(paramTypes, paramType)
 		}
 	}
 	p.consume(lexer.TokenRParen)
+
+	// Verificar tipo de retorno
+	var returnType Type = TypeAny
+	if p.currentToken().Type == lexer.TokenTypeColon {
+		p.consume(lexer.TokenTypeColon)
+		returnType = p.parseTypeAnnotation()
+	}
+
 	p.consume(lexer.TokenLBrace)
 
 	// Analisar corpo da função
@@ -423,7 +684,13 @@ func (p *Parser) parseFunction() Node {
 	}
 	p.consume(lexer.TokenRBrace)
 
-	return &FunctionNode{Name: name, Parameters: params, Body: body}
+	return &FunctionNode{
+		Name:       name,
+		Parameters: params,
+		ParamTypes: paramTypes,
+		ReturnType: returnType,
+		Body:       body,
+	}
 }
 
 // parseReturn analisa uma expressão de retorno
@@ -469,24 +736,29 @@ func (p *Parser) parseExpression() Node {
 	return left
 }
 
-// parseTerm analisa um termo (variável, número ou string)
+// parseTerm analisa um termo (variável, número, string ou boolean)
 func (p *Parser) parseTerm() Node {
 	if p.currentToken().Type == lexer.TokenIdentifier {
 		if p.pos+1 < len(p.tokens) && p.tokens[p.pos+1].Type == lexer.TokenLParen {
 			return p.parseFunctionCall()
 		}
 		name := p.consume(lexer.TokenIdentifier).Value
-		return &VariableNode{Name: name}
+		return &VariableNode{Name: name, Type: p.vars[name]}
 	}
 
 	if p.currentToken().Type == lexer.TokenNumber {
 		value, _ := strconv.Atoi(p.consume(lexer.TokenNumber).Value)
-		return &AssignNode{Value: value}
+		return &AssignNode{Value: value, DeclaredType: TypeNumber, InferredType: TypeNumber}
 	}
 
 	if p.currentToken().Type == lexer.TokenString {
 		value := p.consume(lexer.TokenString).Value
 		return &StringLiteralNode{Value: value}
+	}
+
+	if p.currentToken().Type == lexer.TokenBoolean {
+		value := p.consume(lexer.TokenBoolean).Value == "true"
+		return &BooleanLiteralNode{Value: value}
 	}
 
 	panic(fmt.Sprintf("Termo inesperado: %s", p.currentToken().Value))
@@ -499,4 +771,21 @@ type StringLiteralNode struct {
 
 func (n *StringLiteralNode) Evaluate(vars map[string]interface{}) interface{} {
 	return n.Value
+}
+
+func (n *StringLiteralNode) GetType() Type {
+	return TypeString
+}
+
+// BooleanLiteralNode representa um valor booleano literal
+type BooleanLiteralNode struct {
+	Value bool
+}
+
+func (n *BooleanLiteralNode) Evaluate(vars map[string]interface{}) interface{} {
+	return n.Value
+}
+
+func (n *BooleanLiteralNode) GetType() Type {
+	return TypeBool
 }
