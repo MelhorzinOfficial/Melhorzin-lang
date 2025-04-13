@@ -1,0 +1,21 @@
+✍️ idade = 25
+✍️ nome = "Melhorzin"
+✍️ pontos:🔢 = 100
+✍️ mensagem:📝 = "Olá, tipo explícito!"
+✍️ ativo:⚖️ = true
+✍️ qualquer:🗑️ = "isso pode ser qualquer coisa"
+
+🖨️ "===== VARIÁVEIS COM TIPOS ====="
+🖨️ "Idade (inferido): " . idade
+🖨️ "Nome (inferido): " . nome
+🖨️ "Pontos (explícito): " . pontos
+🖨️ "Mensagem (explícito): " . mensagem
+🖨️ "Ativo (explícito): " . ativo
+🖨️ "Qualquer (tipo any): " . qualquer
+
+🖨️ "===== OPERAÇÕES ====="
+✍️ soma = idade + pontos
+🖨️ "Soma: " . soma
+
+✍️ texto = nome . " versão " . idade
+🖨️ "Texto: " . texto 
